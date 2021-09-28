@@ -20,7 +20,7 @@ JDK 11, Maven 3.6.3, Unix shell (/bin/sh)
 
 ## Output Example
 
-  % ./crawl https://duckduckgo.com ]
+  ./crawl https://duckduckgo.com
 
 	OK https://duckduckgo.com/robots.txt
 	• https://duckduckgo.com/about
