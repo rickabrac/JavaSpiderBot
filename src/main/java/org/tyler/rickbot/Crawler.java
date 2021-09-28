@@ -377,8 +377,6 @@ public class Crawler
 				if( responseCode == HttpURLConnection.HTTP_OK )
 				{
 					String robotsTxtStr = robotsHttp.getPage();
-if( robotsTxtStr.startsWith( "http" ) )
-	println( "WTF" );
 					robotsTxtMap.put( hostname, robotsTxtStr );
 					newRobotsTxt = true;
 				}
@@ -459,7 +457,7 @@ if( robotsTxtStr.startsWith( "http" ) )
 		if( newRobotsTxt )
 		{
 			if( robotRules != null )
-				println( "OK " + protocol + hostname + _robotsTxt + " Crawl-delay=" + crawlDelay ); 
+				println( "OK " + protocol + hostname + _robotsTxt + " crawl-delay=" + crawlDelay ); 
 			else
 				println( "NO " + protocol + hostname + _robotsTxt ); 
 		}
@@ -487,7 +485,6 @@ if( robotsTxtStr.startsWith( "http" ) )
 			// handle http(s) redirect
 
 			url = e.getLocation();
-println( "REDIRECT [" + url + "]" );
 
 			if( url.indexOf( domain ) < 0 )
 				return( null );	// ignore redirect if different domain
@@ -517,13 +514,7 @@ println( "REDIRECT [" + url + "]" );
 				hostname = url.substring( endProtocol + 3, url.length() ).toLowerCase();
 				path = ""; 
 			}
-/*
-			if( hostname.indexOf( domain ) < 0 ) 
-{
-	println( "1 SKIP " + url );
-				return( null ); // ignore redirect to different domain
-}
-*/
+
 			if( visited.contains( protocol + hostname + path ) )
 				return( null ); // ignore visited
 
@@ -534,8 +525,6 @@ println( "REDIRECT [" + url + "]" );
 
 			if( !subdomainSwitching && visited.size() == 1 )
 				domain = hostname;
-
-//			Thread.sleep( 1000 * crawlDelay );		// throttling as per robots.txt, minimum is one second 
 
 			url = protocol + hostname + path;
 
@@ -761,10 +750,7 @@ println( "REDIRECT [" + url + "]" );
 				// don't display duplicate urls for same page 
 
 				if( _hostname.indexOf( domain ) < 0 ) 
-{
-	println( "\tSKIP [" + _hostname + "]" );
 					continue;
-}
 
 				if( visited.contains( _url ) )
 					continue; // skip if previously visited
@@ -795,7 +781,7 @@ println( "REDIRECT [" + url + "]" );
 
 				if( !href.startsWith( "/" ) )
 				{
-					println( "\tINVALID href=[" + href + "]" );
+//					println( "\tINVALID href=[" + href + "]" );
 					continue; // not a real link
 				}
 
@@ -835,7 +821,7 @@ println( "REDIRECT [" + url + "]" );
 
 			newTargets.add( new HttpsTarget( url ) );
 			
-int crawlDelay = 1;
+			int crawlDelay = 1;
 
 			ArrayList< HttpsTarget > pageTargets = null;
 			try
@@ -843,7 +829,7 @@ int crawlDelay = 1;
 				long now = date.getTime(); 
 				if( lastLoadMillis < 1000 * crawlDelay )
 				{
-					println( "Thread.sleep( " + (1000 * crawlDelay - lastLoadMillis) + " )" );
+//					println( "Thread.sleep( " + (1000 * crawlDelay - lastLoadMillis) + " )" );
 					Thread.sleep( 1000 * crawlDelay - lastLoadMillis );
 				}
 				pageTargets = loadTarget( target );
@@ -920,11 +906,9 @@ int crawlDelay = 1;
 
 			targets.add( new HttpsTarget( url ) );
 
-int level = 1;
-			for( targets = crawl( targets ); targets.size() > 0; targets = crawl( targets ) )
-			{
-				println( "LEVEL=" + ++level + " targets.size()=" + targets.size() );
-			}
+			for( targets = crawl( targets ); targets.size() > 0; targets = crawl( targets ) );
+
+			println( "" + visited.size() + " pages crawled." );
 		}
 		catch( Exception e )
 		{
@@ -944,4 +928,3 @@ int level = 1;
 		System.out.println( s );
 	}
 }
-
