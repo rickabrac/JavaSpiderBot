@@ -34,6 +34,7 @@
 //		href=[https://twitter.com/duckduckgo]
 //		href=[https://reddit.com/r/duckduckgo]
 //	ERROR 404 [https://duckduckgo.com/newsletter]
+//	/robots.txt DISALLOW [https://duckduckgo.com/search?foo=bar]
 //
 // Legend:
 //
@@ -41,9 +42,11 @@
 //
 //	Indented lines with "href=[..."" indicate unique crawlable URLs within the preceeding page.
 //
-// The last line indicates an example of an HTTP failure to load.
+//	The ERROR line is an example of an HTTP file not found failure.
 //
-// Limitations: 
+//	The last line indicates that crawling the page is disallowed by /robots.txt
+//
+//	Limitations: 
 //
 //  • HTTP/1.1 101 Switching Protocols is not supported.
 //	• failed connections due to temporary network outages should be retried. 
