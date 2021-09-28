@@ -18,9 +18,9 @@ JDK 11, Maven 3.6.3, Unix shell (/bin/sh)
 
 • Enter './crawl <url>' and watch it go. 
 
-## Output Example
+## Sample Output
 
-  ./crawl https://duckduckgo.com
+	./crawl https://duckduckgo.com
 
 	OK https://duckduckgo.com/robots.txt
 	• https://duckduckgo.com/about
@@ -39,15 +39,15 @@ JDK 11, Maven 3.6.3, Unix shell (/bin/sh)
 	ERROR 404 [https://duckduckgo.com/newsletter]
 	/robots.txt DISALLOW [https://duckduckgo.com/search?foo=bar]
 
-  Legend:
+## Legend
 
-	Lines beginning with "•" indicate a successfully crawled page.
+	• Lines beginning with "•" indicate a successfully crawled page.
 
-	Indented lines with "href=[..."" indicate unique crawlable URLs within the preceeding page.
+	• Indented lines with "href=[..."" indicate unique crawlable URLs within the preceeding page.
 
-	The ERROR line is an example of an HTTP file not found failure.
+	• The ERROR line is an example of an HTTP file not found failure.
 
-	The last line indicates that crawling the page is disallowed by /robots.txt
+	• The last line indicates that crawling the page is disallowed by /robots.txt
 
 ## Limitations
 
