@@ -38,7 +38,9 @@ JDK 11, Maven 3.6.3, Unix shell (/bin/sh)
 		href=[https://reddit.com/r/duckduckgo]
 	ERROR 404 [https://duckduckgo.com/newsletter]
 	/robots.txt DISALLOW [https://duckduckgo.com/search?foo=bar]
-## Legend?
+
+## Legend
+
 	• Lines beginning with "•" indicate a successfully crawled page.
 
 	• Indented lines with "href=[..."" indicate unique crawlable URLs within the preceeding page.
@@ -46,6 +48,7 @@ JDK 11, Maven 3.6.3, Unix shell (/bin/sh)
 	• The ERROR line is an example of an HTTP file not found failure.
 
 	• The last line indicates that crawling the page is disallowed by /robots.txt
+
 ## Limitations
 
 • Switching Protocols (if requested via HTTP/1.1 101) is not supported.
