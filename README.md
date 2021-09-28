@@ -18,9 +18,9 @@ JDK 11, Maven 3.6.3, Unix shell (/bin/sh)
 
 • Enter './crawl <url>' and watch it go. 
 
-## Output
+## Output Example
 
-Example [ ./crawl https://duckduckgo.com ] :
+  % ./crawl https://duckduckgo.com ]
 
 	OK https://duckduckgo.com/robots.txt
 	• https://duckduckgo.com/about
@@ -39,7 +39,7 @@ Example [ ./crawl https://duckduckgo.com ] :
 	ERROR 404 [https://duckduckgo.com/newsletter]
 	/robots.txt DISALLOW [https://duckduckgo.com/search?foo=bar]
 
- Legend:
+  Legend:
 
 	Lines beginning with "•" indicate a successfully crawled page.
 
