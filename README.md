@@ -12,7 +12,7 @@ JDK 11, Maven 3.6.3, Unix shell (/bin/sh)
 
 ## Installation
 
-• Open terminal window and navigate to project directory.
+• Open terminal window and navigate to the project directory.
 
 • Enter 'mvn compile assembly:single'
 
@@ -41,22 +41,24 @@ JDK 11, Maven 3.6.3, Unix shell (/bin/sh)
 
 ## Legend
 
-	• Lines beginning with "•" indicate a successfully crawled page.
+	• Lines beginning with "•" indicate successfully crawled pages.
 
-	• Indented lines with "href=[..."" indicate unique crawlable URLs within the preceeding page.
+	• Indented lines with "href=[..."" indicate unique, crawlable URLs on the preceeding page.
 
-	• The ERROR line is an example of an HTTP file not found failure.
+	• The ERROR line indicates an HTTP file not found failure.
 
-	• The last line indicates that crawling the page is disallowed by /robots.txt
+	• The last line indicates a page disallowed by /robots.txt
 
 ## Limitations
 
-• Switching Protocols (if requested via HTTP/1.1 101) is not supported.
+• Switching Protocols (See HTTP/1.1 101) is not supported.
 
-• Transient connection failures are not retried. 
+• Pages that cannot be loaded due to transient failures should be retried.
 
 • Robot meta tags not supported (https://developers.google.com/search/docs/advanced/robots/robots_meta_tag))
 
+• If loading/processing of a page exceeds crawl-delay, app is not able to maximize rate of ingestion. 
+
 ## Dependencies
 
-• Relies on crawlercommons.robots.* for /robots.txt enforcement
+• Uses crawlercommons.robots.* to enforce /robots.txt directives 

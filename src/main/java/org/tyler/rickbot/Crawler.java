@@ -51,6 +51,7 @@
 //  • HTTP/1.1 101 Switching Protocols is not supported.
 //	• failed connections due to temporary network outages should be retried. 
 //	• robot meta tags not supported (https://developers.google.com/search/docs/advanced/robots/robots_meta_tag)
+//	• single-threaded 
 //
 
 package org.tyler.rickbot;
@@ -64,20 +65,23 @@ import java.util.Iterator;
 import java.util.ArrayList;
 import java.util.regex.Pattern;
 import java.util.Date;
+import java.util.concurrent.ConcurrentHashMap;
 import java.net.URL;
 import java.net.HttpURLConnection;
-import java.nio.charset.StandardCharsets;
 import javax.net.ssl.HttpsURLConnection;
+import java.nio.charset.StandardCharsets;
+// import java.security.KeyStore.CallbackHandlerProtection;
 import crawlercommons.robots.*;    // relies on crawlercommons for /robots.txt enforcement
 
 public class Crawler
 {
 	private boolean subdomainSwitching = true;           // allow subdomain switching
-	private String domain;                               // domain name being crawled
+	private String domain;                               // common name of target site
 	private Pattern tagRegex = null;                     // regex for valid xml tag 
 	private HashMap< String, String > robotsTxtMap = null; // hash map of robots.txt content
-	private HashSet< String > visited;                   // hash set of visited pages
-	private long lastLoadMillis = 0;                         // used to calculate crawlDelay
+//	private HashSet< String > visited;                   // hash set of visited pages
+	private ConcurrentHashSet< String > visited;         // concurrent hash set of visited pages
+	private long lastLoadMillis = 0;                     // used to calculate crawlDelay
 	final private int maxTagLength = 666;                // assumed max tag length used with regex matcher
 	final private String _doctype = "<!DOCTYPE ";        // "<!DOCTYPE "
 	final private String _robotsTxt = "/robots.txt";     // "robots.txt"
@@ -105,12 +109,41 @@ public class Crawler
 		".xlsx",
 		".zip"
 	};
+//	Long started = new Date().getTime(); 
 
 	Crawler ()
 	{
 		tagRegex = Pattern.compile( "<(\"[^\"]*\"|'[^']*'|[^'\">])*>" );    // matches valid xml tag
 		robotsTxtMap = new HashMap<>();
-		visited = new HashSet<>();
+//		visited = new HashSet<>();
+		visited = new ConcurrentHashSet<>();
+	}
+
+	// Concurrent HashSet<> using ConcurrentHashMap() 
+
+	private class ConcurrentHashSet< T >
+	{
+		private ConcurrentHashMap< T, String > map = null;
+
+		ConcurrentHashSet ()
+		{
+			map = new ConcurrentHashMap< T, String >();
+		}
+
+		void add ( T obj )
+		{
+			map.put( obj, "" );
+		}
+
+		int size ()
+		{
+			return( map.size() );
+		}
+
+		boolean contains ( T obj )
+		{
+			return( map.get( obj ) != null );
+		}
 	}
 
 	// thrown by HttpsRequest on http(s) redirect
@@ -131,7 +164,7 @@ public class Crawler
 		}
 	}
 
-	// convenience class that uses Http(s)URLConnection to load a single web page or /robots.txt
+	// convenience class using Http(s)URLConnection to load single page or /robots.txt
 
 	private class HttpsRequest
 	{
@@ -187,7 +220,7 @@ public class Crawler
 			}
 		}
 
-		// execute() loads single page of html or text (/robots.txt)
+		// loads single web page or /robots.txt
 
 		private int execute () throws Exception
 		{
@@ -254,7 +287,7 @@ public class Crawler
 			return( responseCode );
 		}
 
-		// return String containing contents of page
+		// returns page content as a String
 
 		private String getPage () throws Exception
 		{
@@ -265,7 +298,7 @@ public class Crawler
 		}
 	}
 
-	// convenience class that encapsulates a url to be searched 
+	// convenience class that parses a url and store its components
 	
 	public class HttpsTarget
 	{
@@ -277,14 +310,13 @@ public class Crawler
 
 		HttpsTarget( String url )
 		{
-			// parse url and store components
-
 			if( !url.toLowerCase().startsWith( "http" ) )
 				return;
 
+			// handle escaped backslashes in protocol specifier
 			final String _escapedSeparator = ":\\/\\/";
 
-			// extract protocol, hostname and path
+			// extract protocol
 			int endProtocol = url.indexOf( _protocolSeparator ); 
 			int offset = _protocolSeparator.length();
 			if( endProtocol < 0 )	// must be escaped
@@ -295,6 +327,8 @@ public class Crawler
 			}
 			else
 				protocol = url.substring( 0, endProtocol + offset );
+
+			// extract hostname and path
 			int slashIndex = url.indexOf( "/", endProtocol + offset );
 			path = "";
 			if( slashIndex >= 0 )
@@ -311,10 +345,9 @@ public class Crawler
 				path = "";
 			}
 
-			// remove trailing forward slash from _hostname
+			// remove trailing forward slash from hostname if present
 			while( hostname.length() > 0 && hostname.charAt( hostname.length() - 1 ) == '\\' ) 
 				hostname = hostname.substring( 0, hostname.length() - 1 );
-
 			port = "";
 			int colonIndex = hostname.indexOf( ":" );
 			if( colonIndex >= 0 )
@@ -335,10 +368,11 @@ public class Crawler
 		}
 	}
 
-	// loadTarget() loads and displays the information for a single web page and returns
-	// a list of unique same-site urls that appear on that page.
+	// loadTarget() loads and displays information for a crawled web page
+	// returns list of unique urls appearing on that page to be crawled.
 
 	Date date = new Date();
+
 	private ArrayList< HttpsTarget > loadTarget ( HttpsTarget target ) throws Exception
 	{
 		String protocol = target.protocol;
@@ -360,6 +394,9 @@ public class Crawler
 				return( null );
 		}
 
+//		long now = date.getTime(); 
+//		println( "" + (visited.size() - 1) + " " + (now - started) / 1000 ); 
+
 		String url = protocol + hostname + port + path;
 
 		SimpleRobotRules robotRules = null;
@@ -369,6 +406,8 @@ public class Crawler
 		if( updateRobotsTxt
 			&& robotsTxtMap.get( hostname ) == null )
 		{
+			// load /robots.txt for new subdomain
+
 			robotRules = null;
 			HttpsRequest robotsHttp = null;
 
@@ -386,12 +425,14 @@ public class Crawler
 				if( responseCode == 101 )	// Switching Protocols
 				{
 					// give up if robots.txt cannot be read
-					println( "Unable to crawl this site because Switching Protocols (HTTP/1.1 101) is unsupported." );
+					println( "Unable to crawl site: Switching Protocols (HTTP/1.1 101) not supported." );
 					System.exit( -1 );
 				}
 			}
 			catch( RedirectException r )
 			{
+				// /robots.txt redirect
+				
 				protocol = protocol.indexOf( _httpsProtocol ) < 0 ? _httpProtocol : _httpsProtocol; 
 
 				String location = r.getLocation();
@@ -417,11 +458,13 @@ public class Crawler
 
 		if( robotsTxtStr != null )
 		{
+			// /robots.txt found for current subdomain
+
 			SimpleRobotRulesParser robotsParser =  new SimpleRobotRulesParser();
 			robotRules = robotsParser.parseContent( protocol + hostname,
 				robotsTxtStr.getBytes( StandardCharsets.UTF_8 ), "text/plain; charset=UTF-8", _rickbot );
 
-			// extract crawl-delay if present (crawlercommons getCrawlDelay() broken)
+			// extract crawl-delay if present (crawlercommons.getCrawlDelay() appears broken)
 			final String _crawlDelay = "crawl-delay:";
 			int crawlDelayIndex = robotsTxtStr.toLowerCase().indexOf( _crawlDelay ); 
 			if( crawlDelayIndex >= 0 ) 
@@ -469,6 +512,7 @@ public class Crawler
 
 		if( robotRules != null )
 		{
+			// rules matcher for current subdomain ready
 			if( !robotRules.isAllowed( protocol + hostname + path ) )
 			{
 				println( "/robots.txt DISALLOW [" + protocol + hostname + path + "]" );
@@ -478,28 +522,26 @@ public class Crawler
 
 		HttpsRequest request = null;
 
-		int responseCode = 666;    // made-up http(s) failure code
+		int responseCode = 666;    // made-up failure http(s) responseCode
 		try {
 			request  = new HttpsRequest( url );    // get page
 			responseCode = request.execute();	
 		}
 		catch( RedirectException e )
 		{
-			// handle http(s) redirect
+			// handle page redirect
 
 			url = e.getLocation();
 
 			if( url.indexOf( domain ) < 0 )
-				return( null );	// ignore redirect if different domain
+				return( null );	// ignore urls for different domains
 
-			// update protocol, hostname and path
-
-			// assume no escaped syntax in redirect 
+			// update protocol, hostname and path, assumption: escaped syntax in redirect 
 			int endProtocol = url.indexOf( "://" );
 			if( endProtocol < 0 )
 				throw( new Exception( "missing protocol specifier" ) );
 
-			// update protocol in case changed
+			// update protocol in case changed 
 			if( url.indexOf( _httpsProtocol ) >= 0 )
 				protocol = _httpsProtocol;
 			else
@@ -518,13 +560,14 @@ public class Crawler
 				path = ""; 
 			}
 
+			// skip page if already visited
 			if( visited.contains( protocol + hostname + path ) )
-				return( null ); // ignore visited
+				return( null );
 
-			// If subdomainSwitching is off, the crawler must allow an initial redirect to succeed.
-			// For example, https://cnn.com will immediately redirect to https://www.cnn.com, which
-			// is technically a different subdomain. In this instance however, the crawler will allow
-			// it. Subsequent redirects to other subdomains fail if subdomainSwitching is not enabled. 
+			// When subdomainSwitching is disabled, the crawler must allow initial an redirect to
+			// succeed. For example, https://cnn.com immediately redirects to https://www.cnn.com,
+			// which is technically a different subdomain. In this instance, the crawler allows it.
+			// Subsequent subdomain redirects will fail when subdomainSwitching is disabled.
 
 			if( !subdomainSwitching && visited.size() == 1 )
 				domain = hostname;
@@ -551,8 +594,8 @@ public class Crawler
 
 		if( responseCode != HttpURLConnection.HTTP_OK )
 		{
-	if( responseCode % 400 > 29 && responseCode != 503 )
-		println( "responseCode=" + responseCode ); 
+if( responseCode % 400 > 29 && responseCode != 503 )
+	println( "responseCode=" + responseCode ); 
 			if( responseCode == 101 )
 				println( "  ERROR 101 Switching Protocols not supported. " + responseCode + " [" + url + "]" );
 			else
@@ -564,28 +607,28 @@ public class Crawler
 
 		println( "• " + url );	// display page url
 
-		ArrayList< String > protocols = new ArrayList<>();    // page protocols 
-		ArrayList< String > hostnames = new ArrayList<>();    // page hostnames 
-		ArrayList< String > ports = new ArrayList<>();        // page ports 
-		ArrayList< String > paths = new ArrayList<>();        // page paths 
+		ArrayList< String > protocols = new ArrayList<>();    // protocol list for pages to be visit 
+		ArrayList< String > hostnames = new ArrayList<>();    // hostname ...
+		ArrayList< String > ports = new ArrayList<>();        // port... 
+		ArrayList< String > paths = new ArrayList<>();        // page...
 
 		String html = request.getPage();
 
-		request = null;	// put out garbage 
-
 		// scan document for href tags 
 
-		HashSet< String > urlSet = new HashSet<>();           // don't list multiple instances of same url
+		HashSet< String > urlSet = new HashSet<>();           // list of href urls displayed for this page so far 
 
 		String maybeHref = null; 
 
-		ArrayList< HttpsTarget > myTargets = new ArrayList<>();
+		ArrayList< HttpsTarget > myTargets = new ArrayList<>();    // list of HttpsTargets to crawl
 
 		for( int tagStart = 0;
 			(tagStart = html.indexOf( "<", tagStart )) >= 0 && tagStart < html.length();
 			tagStart+=maybeHref.length() )
 		{
-			// this uses a regular expression (tagRegex) to identify valid tags
+			// use tagRegex to identify individual tags
+
+// ### COMMENTARY ON DECISION TO AVOID HTML PARSERS ###
 
 			maybeHref = " "; 
 			int tagEnd;
@@ -748,18 +791,19 @@ public class Crawler
 					_hostname = _hostname.substring( 0, colonIndex );
 				} 
 
-				_url = _protocol + _hostname + _port + _path;
-
-				// don't display duplicate urls for same page 
-
+				// ignore if different domain
 				if( _hostname.indexOf( domain ) < 0 ) 
 					continue;
 
-				if( visited.contains( _url ) )
-					continue; // skip if previously visited
+				_url = _protocol + _hostname + _port + _path;
+
+				// only display url once per page
 
 				if( urlSet.contains( _url ) )
-					continue; // skip if already listed
+					continue; // already listed
+
+				if( visited.contains( _url ) )
+					continue; // already visited
 
 				urlSet.add( _url );
 
@@ -805,11 +849,11 @@ public class Crawler
 		return( myTargets );
 	}
 
-	// crawl() is called called repeatedly by run() to crawl the site using breadth-first search.
+	// called by run() to crawl the site in breadth-first order
 
-	private ArrayList< HttpsTarget > crawl ( ArrayList< HttpsTarget > targets ) 
+	private ArrayList< HttpsTarget > crawl ( ArrayList< HttpsTarget > targets )
 	{
-		ArrayList< HttpsTarget > newTargets = new ArrayList<>();        // page paths 
+		ArrayList< HttpsTarget > newTargets = new ArrayList<>();    // urls to crawl appearing on this page 
 		
 		for( Iterator it = targets.iterator(); it.hasNext(); )
 		{
@@ -831,10 +875,7 @@ public class Crawler
 			{
 				long now = date.getTime(); 
 				if( lastLoadMillis < 1000 * crawlDelay )
-				{
-//					println( "Thread.sleep( " + (1000 * crawlDelay - lastLoadMillis) + " )" );
 					Thread.sleep( 1000 * crawlDelay - lastLoadMillis );
-				}
 				pageTargets = loadTarget( target );
 				date = new Date();
 				lastLoadMillis = date.getTime() - now;
@@ -862,7 +903,7 @@ public class Crawler
 
 			String url = args[ 0 ];
 
-			// strip trailing slashes
+			// strip trailing slash(es)
 			while( url.length() > 0 && url.charAt( url.length() - 1 ) == '/' )
 				url = url.substring( 0, url.length() - 1 );
 			int endProtocol = url.indexOf( "://" );
@@ -883,7 +924,7 @@ public class Crawler
 				hostname = url.substring( endProtocol + 3, url.length() );
 				path = "";
 			}
-			// extract port spec if present
+			// extract port spec
 			int colonIndex = hostname.indexOf( ":" );
 			if( colonIndex >= 0 )
 			{
@@ -891,7 +932,7 @@ public class Crawler
 				hostname = hostname.substring( 0, colonIndex );
 			} 
 
-			// extract domain from hostname
+			// extract domain
 			int dots = 0;
 			for( int i = hostname.length() - 1; i >= 0; i-- )
 			{
@@ -908,6 +949,8 @@ public class Crawler
 			ArrayList< HttpsTarget > targets = new ArrayList< HttpsTarget >();
 
 			targets.add( new HttpsTarget( url ) );
+
+			// crawl all unique crawlable sites on this page
 
 			for( targets = crawl( targets ); targets.size() > 0; targets = crawl( targets ) );
 
