@@ -51,7 +51,7 @@
 //  • HTTP/1.1 101 Switching Protocols is not supported.
 //	• failed connections due to temporary network outages should be retried. 
 //	• robot meta tags not supported (https://developers.google.com/search/docs/advanced/robots/robots_meta_tag)
-//	• single-threaded 
+//	• current implementation can fall behind max request rate for pages that take > crawlDelay to load
 //
 
 package org.tyler.rickbot;
