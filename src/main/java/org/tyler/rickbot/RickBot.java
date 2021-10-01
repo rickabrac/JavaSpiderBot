@@ -635,8 +635,6 @@ public class RickBot
 			{
 				// use tagRegex to identify individual tags
 
-	// ### COMMENTARY ON DECISION TO AVOID HTML PARSERS ###
-
 				maybeHref = " "; 
 				int tagEnd;
 				for( tagEnd = tagStart + 1;
