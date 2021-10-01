@@ -70,10 +70,9 @@ import java.net.URL;
 import java.net.HttpURLConnection;
 import javax.net.ssl.HttpsURLConnection;
 import java.nio.charset.StandardCharsets;
-// import java.security.KeyStore.CallbackHandlerProtection;
 import crawlercommons.robots.*;    // relies on crawlercommons for /robots.txt enforcement
 
-public class Crawler
+public class RickBot
 {
 	private boolean subdomainSwitching = true;           // allow subdomain switching
 	private String domain;                               // common name of target site
@@ -110,7 +109,7 @@ public class Crawler
 	};
 //	Long started = new Date().getTime(); 
 
-	Crawler ()
+	RickBot ()
 	{
 		tagRegex = Pattern.compile( "<(\"[^\"]*\"|'[^']*'|[^'\">])*>" );    // matches valid xml tag
 		robotsTxtMap = new HashMap<>();
@@ -238,11 +237,11 @@ public class Crawler
 
 	Date date = new Date();
 
-	private class TargetLoader implements Runnable
+	private class HttpsLoader implements Runnable
 	{
 		private HttpsTarget target;
 		
-		TargetLoader ( HttpsTarget target )
+		HttpsLoader ( HttpsTarget target )
 		{
 			this.target = target;
 		}
@@ -871,60 +870,78 @@ public class Crawler
 		}
 	}
 
-	// called by run() to crawl the site in breadth-first order
+	// crawls website in breadth-first order, runs as a background thread
 
-	private ArrayList< HttpsTarget > crawl ( ArrayList< HttpsTarget > targets )
+	private class Crawler implements Runnable
 	{
-		ArrayList< HttpsTarget > newTargets = new ArrayList<>();    // urls to crawl appearing on this page 
-		
-		for( Iterator it = targets.iterator(); it.hasNext(); )
+		private boolean finished = false;
+
+		private ArrayList< HttpsTarget > targets;
+
+		Crawler( ArrayList< HttpsTarget > targets ) 
 		{
-			HttpsTarget target = (HttpsTarget) it.next();
-
-			String url = target.getUrl();
-
-			if( visited.contains( url ) )
-				continue;
-
-			visited.add( url );
-
-			newTargets.add( new HttpsTarget( url ) );
-			
-			int crawlDelay = 1;
-
-			ArrayList< HttpsTarget > pageTargets = null;
-			try
-			{
-				long now = date.getTime(); 
-				if( lastLoadMillis < 1000 * crawlDelay )
-					Thread.sleep( 1000 * crawlDelay - lastLoadMillis );
-				pageTargets = new TargetLoader( target ).load();
-				date = new Date();
-				lastLoadMillis = date.getTime() - now;
-			}
-			catch( Exception e )
-			{
-				println( "crawl() Exception: " + e.getMessage() );
-				continue;
-			}
-
-			if( pageTargets != null )
-				newTargets.addAll( pageTargets );
+			this.targets = targets;	
 		}
-		return( newTargets );
+
+		private ArrayList< HttpsTarget > crawl ()
+		{
+			ArrayList< HttpsTarget > newTargets = new ArrayList<>();    // urls to crawl appearing on this page 
+			
+			for( Iterator it = targets.iterator(); it.hasNext(); )
+			{
+				HttpsTarget target = (HttpsTarget) it.next();
+
+				String url = target.getUrl();
+
+				if( visited.contains( url ) )
+					continue;
+
+				visited.add( url );
+
+				newTargets.add( new HttpsTarget( url ) );
+				
+				int crawlDelay = 1;
+
+				ArrayList< HttpsTarget > pageTargets = null;
+				try
+				{
+					long now = date.getTime(); 
+					if( lastLoadMillis < 1000 * crawlDelay )
+						Thread.sleep( 1000 * crawlDelay - lastLoadMillis );
+					pageTargets = new HttpsLoader( target ).load();
+					date = new Date();
+					lastLoadMillis = date.getTime() - now;
+				}
+				catch( Exception e )
+				{
+					println( "crawl() Exception: " + e.getMessage() );
+					continue;
+				}
+
+				if( pageTargets != null )
+					newTargets.addAll( pageTargets );
+			}
+			return( newTargets );
+		}
+
+		private ArrayList< HttpsTarget > getTargets ()
+		{
+			return( targets );
+		}
+
+		public void run ()
+		{
+			for( targets = new Crawler( targets ).crawl(); targets.size() > 0; targets = new Crawler( targets ).crawl() );
+			finished = true;
+		}
 	}
 
 	// called by main()
 
-	public void run ( String [] args )  // instance method called by main()
+	public void crawlSite ( String url )  // instance method called by main()
 	{
 		try
 		{
-			if( args.length != 1 )
-				throw( new Exception( "Usage: crawl <url>" ) );
-
-			String url = args[ 0 ];
-
 			// strip trailing slash(es)
 			while( url.length() > 0 && url.charAt( url.length() - 1 ) == '/' )
 				url = url.substring( 0, url.length() - 1 );
@@ -972,9 +989,23 @@ public class Crawler
 
 			targets.add( new HttpsTarget( url ) );
 
-			// crawl all unique crawlable sites on this page
+			Crawler crawler = new Crawler( targets );
 
-			for( targets = crawl( targets ); targets.size() > 0; targets = crawl( targets ) );
+			Thread crawlerThread = new Thread( new Crawler( targets ) );
+
+			crawlerThread.start();
+
+			lastLoadMillis = new Date().getTime();
+
+			while( !crawler.finished )
+			{
+				if( new Date().getTime() - lastLoadMillis > 30000 )
+				{
+					crawlerThread.interrupt();
+					crawlerThread = new Thread( new Crawler( crawler.targets ) );
+				}
+				Thread.sleep( 1000 );
+			}
 
 			println( "" + visited.size() + " pages crawled." );
 		}
@@ -987,11 +1018,16 @@ public class Crawler
 
 	static public void main ( String [] args )
 	{
-		Crawler test = new Crawler();
-		test.run( args );
+		if( args.length != 1 )
+		{
+			println( "Usage: crawl <url>" );
+			System.exit( -1 );
+		}
+		RickBot rickbot = new RickBot();
+		rickbot.crawlSite( args[ 0 ] );
 	}
 
-	private void println ( String s )    // convenience method 
+	private static void println ( String s )    // convenience method 
 	{
 		System.out.println( s );
 	}
