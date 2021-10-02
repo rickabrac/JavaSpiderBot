@@ -592,8 +592,6 @@ public class RickBot
 
 			if( responseCode != HttpURLConnection.HTTP_OK )
 			{
-				if( responseCode % 400 > 29 && responseCode != 503 )
-					println( "responseCode=" + responseCode ); 
 				if( responseCode == 101 )
 					println( "  ERROR 101 Switching Protocols not supported. " + responseCode + " [" + url + "]" );
 				else
