@@ -125,23 +125,19 @@ public class RickBot
 	{
 		private ConcurrentHashMap< T, String > map = null;
 
-		ConcurrentHashSet ()
-		{
+		ConcurrentHashSet () {
 			map = new ConcurrentHashMap< T, String >();
 		}
 
-		void add ( T obj )
-		{
+		void add ( T obj ) {
 			map.put( obj, "" );
 		}
 
-		int size ()
-		{
+		int size () {
 			return( map.size() );
 		}
 
-		boolean contains ( T obj )
-		{
+		boolean contains ( T obj ) {
 			return( map.get( obj ) != null );
 		}
 	}
@@ -153,13 +149,11 @@ public class RickBot
 	{
 		private String location;
 
-		private RedirectException( String location ) 
-		{
+		private RedirectException( String location ) {
 			this.location = location;
 		}
 
-		private String getLocation ()
-		{
+		private String getLocation () {
 			return( location );
 		}
 	}
@@ -228,8 +222,7 @@ public class RickBot
 			updateRobotsTxt = (robotsTxtMap.get( hostname ) == null ? true : false );
 		}
 
-		String getUrl ()    // url composed from stored components 
-		{
+		String getUrl () {  // url composed from stored components 
 			return( protocol + hostname + port + path );
 		}
 	}
@@ -1131,8 +1124,7 @@ public class RickBot
 		rickbot.crawlSite( args[ 0 ] );
 	}
 
-	private static void println ( String s )    // convenience method 
-	{
+	private static void println ( String s ) {  // convenience method 
 		System.out.println( s );
 	}
 }
