@@ -43,7 +43,7 @@
           <archive>
             <manifest>
               <mainClass>
-                org.tyler.rickbot.Crawler
+                org.tyler.rickbot.RickBot
               </mainClass>
             </manifest>
           </archive>
