@@ -234,8 +234,7 @@ public class RickBot
 		}
 	}
 
-	// ###### loadTarget() loads and displays information for a crawled web page
-	// returns list of unique same-domain urls appearing on that page.
+	// convenience class that loads pages asynchronously/concurrently
 
 	private class HttpsLoader implements Runnable
 	{
@@ -381,6 +380,8 @@ public class RickBot
 				return( stringBuilder.toString() ); 
 			}
 		}
+
+		// loads an http(s) page synchronously or asynchronously 
 
 		private ArrayList< HttpsTarget > load () throws Exception
 		{
@@ -887,7 +888,7 @@ public class RickBot
 
 		private ArrayList< HttpsTarget > crawl ()
 		{
-			// Convenicent class encapsulates java.util.concurrent.Future to allow
+			// convenicent class encapsulates java.util.concurrent.Future to allow
 			// polling for completion after asynchornously launching loader.
 			// Asynchronous behavior is required to optimize the average page
 			// crawling rate.
