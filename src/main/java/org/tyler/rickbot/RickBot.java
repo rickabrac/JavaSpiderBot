@@ -939,7 +939,7 @@ public class RickBot
 						long runningSeconds = (now - started) / 1000L;
 						float avgRequestRate = (float) (visited.size() + robotsTxtMap.size()) / ((float) (now - started) / 1000);
 //						println( "RUNNING/LOADED: " + runningSeconds + "/" +  (robotsTxtMap.size() + visited.size()) );
-						println( String.format( "AVG REQUEST RATE: %.02f", avgRequestRate ) );
+//						println( String.format( "AVG REQUEST RATE: %.02f", avgRequestRate ) );
 						if( excessDelayMillis > 0 ) 
 							excessDelayMillis -= (1000 * crawlDelay + (now - lastLoadMillis)); 
 						else if( avgRequestRate > crawlDelay )
