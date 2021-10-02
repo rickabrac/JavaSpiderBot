@@ -1,10 +1,11 @@
 ## Synopsis
 
-Single domain web crawler in Java by Rick Tyler.
+Multi-threaded single domain web crawler in Java by Rick Tyler.
 
 ## Description
 
 This crawler uses a breadth-first strategy to search an entire website, subdomains included. 
+It honors the Crawl-delay setting in /robots.txt and prevents loading of disallowed pages. 
 
 ## System Requirements 
 
@@ -56,8 +57,6 @@ JDK 11, Maven 3.6.3, Unix shell (/bin/sh)
 • Pages that cannot be loaded due to transient failures should be retried.
 
 • Robot meta tags not supported (https://developers.google.com/search/docs/advanced/robots/robots_meta_tag))
-
-• If loading/processing of a page exceeds crawl-delay, app is not able to maximize rate of ingestion. 
 
 ## Dependencies
 
