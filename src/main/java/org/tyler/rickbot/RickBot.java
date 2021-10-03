@@ -82,7 +82,6 @@ public class RickBot
 	private HashMap< String, String > robotsTxtMap = null; // hash map of robots.txt content
 	private ConcurrentHashSet< String > visited;         // concurrent hash set of visited pages
 	private Long lastLoadMillis = 0L;                    // used to calculate crawlDelay
-	private Long excessDelayMillis = 0L;                 // used to calculate crawlDelay
 	private ExecutorService executor = null;             // used to run loadTarget() asynchronously
 	final private int maxTagLength = 666;                // assumed max tag length used with regex matcher
 	final private String _doctype = "<!DOCTYPE ";        // "<!DOCTYPE "
@@ -315,8 +314,7 @@ public class RickBot
 					responseCode = http.getResponseCode();
 				}
 				if( responseCode == 301 || responseCode == 302 ) 
-				{
-					// redirect
+				{	// redirect
 					String location = secure ? https.getHeaderField( "Location" ) : http.getHeaderField( "Location" );
 					throw( new RedirectException( location ) );
 				}
@@ -381,18 +379,18 @@ public class RickBot
 			String path = target.path;
 			boolean updateRobotsTxt = target.updateRobotsTxt;
 
-			if( !subdomainSwitching && !hostname.equalsIgnoreCase( domain ) )
-				return( null );
+//			if( !subdomainSwitching && !hostname.equalsIgnoreCase( domain ) )
+//				return( null );
 
-			// ignore non-html formats before http(s) get 
-			// assume file extension is accurate
-
-			for( int i = 0; i < _ignoreExtensions.length; i++ )
-			{
-				String ext = _ignoreExtensions[ i ];
-				if( path.endsWith( ext ) || path.indexOf( ext + "?" ) >= 0 )
-					return( null );
-			}
+//			// ignore non-html formats before http(s) get 
+//			// assume file extension is accurate
+//
+//			for( int i = 0; i < _ignoreExtensions.length; i++ )
+//			{
+//				String ext = _ignoreExtensions[ i ];
+//				if( path.endsWith( ext ) || path.indexOf( ext + "?" ) >= 0 )
+//					return( null );
+//			}
 
 			String url = protocol + hostname + port + path;
 
@@ -422,7 +420,7 @@ public class RickBot
 					if( responseCode == 101 )	// Switching Protocols
 					{
 						// give up if robots.txt cannot be read
-						println( "Unable to crawl site: Switching Protocols (HTTP/1.1 101) not supported." );
+						println( "Unable to crawl site: Switching Protocols (HTTP/1.1 101) is not supported." );
 						System.exit( -1 );
 					}
 				}
@@ -558,9 +556,9 @@ public class RickBot
 					path = ""; 
 				}
 
-				// skip page if already visited
-				if( visited.contains( protocol + hostname + path ) )
-					return( null );
+//				// skip page if already visited
+//				if( visited.contains( protocol + hostname + path ) )
+//					return( null );
 
 				// When subdomainSwitching is disabled, the crawler must allow initial an redirect to
 				// succeed. For example, https://cnn.com immediately redirects to https://www.cnn.com,
@@ -839,7 +837,7 @@ public class RickBot
 
 				targets.add( new HttpsTarget( _url ) );
 
-				println( "\thref=[" + href + "]" );
+//				println( "\thref=[" + href + "]" );
 			}
 
 			return( targets );
@@ -892,16 +890,43 @@ public class RickBot
 				Future future;
 			}
 
-			LinkedList< HttpsLoaderAsync > pending = new LinkedList< HttpsLoaderAsync >();
-
-			ArrayList< HttpsTarget > newTargets = new ArrayList<>();    // urls to crawl appearing on this page 
-
 			ArrayList< HttpsTarget > pageTargets = new ArrayList< HttpsTarget >(); 
+			ArrayList< HttpsTarget > newTargets = new ArrayList<>();    // urls to crawl appearing on this page 
+			LinkedList< HttpsLoaderAsync > pending = new LinkedList< HttpsLoaderAsync >();
 			
 			for( Iterator it = targets.iterator(); it.hasNext(); )
 			{
 				HttpsTarget target = (HttpsTarget) it.next();
 
+				String robotsTxtStr = robotsTxtMap.get( target.hostname );
+
+				SimpleRobotRules robotRules = null;
+
+				if( robotsTxtStr != null )
+				{
+					// /robots.txt found for current subdomain
+					SimpleRobotRulesParser robotsParser =  new SimpleRobotRulesParser();
+					robotRules = robotsParser.parseContent( target.protocol + target.hostname,
+						robotsTxtStr.getBytes( StandardCharsets.UTF_8 ), "text/plain; charset=UTF-8", _rickbot );
+					// rules matcher for current subdomain ready
+					if( !robotRules.isAllowed( target.protocol + target.hostname + target.path ) )
+					{
+						println( "  /robots.txt DISALLOW " + target.protocol + target.hostname + target.path );
+						continue;
+					}
+				}
+
+				if( !subdomainSwitching && !target.hostname.equalsIgnoreCase( domain ) )
+					continue;
+
+				// ignore non-html formats before http(s) get - assume file extension is accurate
+				for( int i = 0; i < _ignoreExtensions.length; i++ )
+				{
+					String ext = _ignoreExtensions[ i ];
+					if( target.path.endsWith( ext ) || target.path.indexOf( ext + "?" ) >= 0 )
+						continue;
+				}
+				
 				String url = target.getUrl();
 
 				if( visited.contains( url ) )
@@ -915,29 +940,17 @@ public class RickBot
 				{
 					long now = new Date().getTime();
 
-					// exceessDelayMillis is used to accumulate the total excess delays
-					// caused large pages that may require > crawlDelay to load. In this case,
-					// the crawler attempts to maintain an average request rate that honors
-					// the Crawl-delay setting in /robots.txt - note that this approach may
-					// that actual request to be higher in some cases.
+					long runningSeconds = (now - started) / 1000L;
+					float avgRequestRate = (float) (visited.size() + robotsTxtMap.size()) / ((float) (now - started) / 1000);
+//					println( "RUNNING/LOADED: " + runningSeconds + "/" +  (robotsTxtMap.size() + visited.size()) );
+//					println( String.format( "AVG REQUEST RATE: %.02f", avgRequestRate ) );
 
 					if( lastLoadMillis > 0 && now - lastLoadMillis <= 1000 * crawlDelay )
 					{
 						long delay = 1000 * crawlDelay - (now - lastLoadMillis);
-						long runningSeconds = (now - started) / 1000L;
-						float avgRequestRate = (float) (visited.size() + robotsTxtMap.size()) / ((float) (now - started) / 1000);
-//						println( "RUNNING/LOADED: " + runningSeconds + "/" +  (robotsTxtMap.size() + visited.size()) );
-//						println( String.format( "AVG REQUEST RATE: %.02f", avgRequestRate ) );
-						if( excessDelayMillis > 0 ) 
-							excessDelayMillis -= (1000 * crawlDelay + (now - lastLoadMillis)); 
-						else if( avgRequestRate > crawlDelay )
-						{
-//							println( "sleep( " + (1000 * crawlDelay - (now - lastLoadMillis)) + " )" );
-							Thread.sleep( delay ); 
-						}
+//						println( "SLEEP( " + delay + " )" );
+						Thread.sleep( delay ); 
 					}
-					else if( lastLoadMillis > 0 )
-						excessDelayMillis += ((now - lastLoadMillis) - (1000 * crawlDelay));
 					
 					// load page asynchronously 
 
@@ -948,6 +961,7 @@ public class RickBot
 					if( started == 0 )
 						started = lastLoadMillis;
 
+//					println( "*** SPAWNING LOADER *** [" + target.getUrl() + "]" );
 					Future future = executor.submit( loader ); 
 
 					pending.add( new HttpsLoaderAsync( loader, future ) );
@@ -957,43 +971,41 @@ public class RickBot
 					println( "crawl() Exception: " + e.getMessage() );
 					continue;
 				}
+			}
 
-				synchronized( pending )
+			synchronized( pending )
+			{
+				while( pending.size() > 0 )
 				{
-					while( pending.size() > 0 )
+					try
 					{
-						try
+						Thread.sleep( 10 );
+						// add loaded targets to pageTargets 
+						for( int i = 0; i < pending.size(); i++ )
 						{
-							Thread.sleep( 10 );
-							// add loaded targets to pageTargets 
-							for( int i = 0; i < pending.size(); i++ )
+							HttpsLoaderAsync async = pending.get( i ); 
+							if( async.future.get() == null )
 							{
-								HttpsLoaderAsync async = pending.get( i ); 
-								if( async.future.get() == null )
-								{
-									// loader finished, add result to pageTargets
-									pending.remove( async );
-									if( async.loader.targets.size() == 0 )
-										continue;
-									HttpsLoader _loader = async.loader;
-									ArrayList< HttpsTarget > _targets = _loader.targets;
-									pageTargets.addAll( async.loader.targets ); 
-
-								}
+								// loader finished, add result to pageTargets
+								pending.remove( async );
+								if( async.loader.targets.size() == 0 )
+									continue;
+								HttpsLoader _loader = async.loader;
+								ArrayList< HttpsTarget > _targets = _loader.targets;
+								pageTargets.addAll( async.loader.targets ); 
 							}
 						}
-						catch( Exception e )
-						{
-							println( "Exception: " + e.getMessage() );
-							System.exit( -1 );
-						} 
-						// ### HANDLE FAILED ###	
 					}
+					catch( Exception e )
+					{
+						println( "Exception: " + e.getMessage() );
+						System.exit( -1 );
+					} 
+					// ### HANDLE FAILED ###	
 				}
-
-				if( pageTargets != null )
-					newTargets.addAll( pageTargets );
 			}
+			if( pageTargets != null )
+				newTargets.addAll( pageTargets );
 
 			// add targets that failed to load to newTargets
 			for( Iterator it = pending.iterator(); it.hasNext(); )
@@ -1099,7 +1111,7 @@ public class RickBot
 
 			executor.shutdown();
 
-			println( "" + visited.size() + " pages crawled." );
+			println( "" + (robotsTxtMap.size() + visited.size()) + " pages crawled." );
 		}
 		catch( Exception e )
 		{
