@@ -52,7 +52,9 @@ JDK 11, Maven 3.6.3, Unix shell (/bin/sh)
 
 ## Limitations
 
-• Switching Protocols (See HTTP/1.1 101) is not supported.
+• Concurrent loading of different subdomains not supported. Crawler should enforce Crawl-delay for subdomains separately.
+
+• Switching Protocols (See HTTP/1.1 101) not supported.
 
 • Pages that cannot be loaded due to transient failures should be retried.
 

@@ -34,7 +34,7 @@
 //		href=[https://twitter.com/duckduckgo]
 //		href=[https://reddit.com/r/duckduckgo]
 //	ERROR 404 [https://duckduckgo.com/newsletter]
-//	/robots.txt DISALLOW [https://duckduckgo.com/search?foo=bar]
+//	DISALLOW [https://duckduckgo.com/search?foo=bar]
 //
 // Legend:
 //
@@ -51,6 +51,7 @@
 //  • HTTP/1.1 101 Switching Protocols is not supported.
 //	• failed connections due to temporary network outages should be retried. 
 //	• robot meta tags not supported (https://developers.google.com/search/docs/advanced/robots/robots_meta_tag)
+//	• crawler should load different subdomains concurrently to maximum throughput for multiple hosts/subdomains
 //
 
 package org.tyler.rickbot;
@@ -81,8 +82,7 @@ public class RickBot
 	private Pattern tagRegex = null;                     // regex for valid xml tag 
 	private HashMap< String, String > robotsTxtMap = null; // hash map of robots.txt content
 	private ConcurrentHashSet< String > visited;         // concurrent hash set of visited pages
-	private Long lastLoadMillis = 0L;                    // used to calculate crawlDelay
-	private ExecutorService executor = null;             // used to run loadTarget() asynchronously
+	private Long lastLoadMillis = 0L;                    // used to throttle request rate
 	final private int maxTagLength = 666;                // assumed max tag length used with regex matcher
 	final private String _doctype = "<!DOCTYPE ";        // "<!DOCTYPE "
 	final private String _robotsTxt = "/robots.txt";     // "robots.txt"
@@ -110,17 +110,14 @@ public class RickBot
 		".xlsx",
 		".zip"
 	};
-	Long started = 0L;
+	private Long started = 0L;
 
 	RickBot ()
 	{
 		tagRegex = Pattern.compile( "<(\"[^\"]*\"|'[^']*'|[^'\">])*>" );    // matches valid xml tag
 		robotsTxtMap = new HashMap<>();
 		visited = new ConcurrentHashSet<>();
-		executor = Executors.newFixedThreadPool( 10 );
 	}
-
-	// used to support asynchronous http(s) loading
 
 	private class ConcurrentHashSet< T >
 	{
@@ -228,12 +225,12 @@ public class RickBot
 		}
 	}
 
-	// that loads a webpage asynchronously
+	// Runnable class to allow asynchronous (concurrent) downloads
 
 	private class HttpsLoader implements Runnable
 	{
-		private HttpsTarget target;
-		private ArrayList< HttpsTarget > targets;
+		HttpsTarget target;
+		ArrayList< HttpsTarget > targets;
 		
 		HttpsLoader ( HttpsTarget target )
 		{
@@ -241,15 +238,15 @@ public class RickBot
 			this.targets = new ArrayList<>();    // list of HttpsTargets to crawl
 		}
 
-		// convenience class using Http(s)URLConnection to load single page or /robots.txt
+		// loads single web page or /robots.txt
 
 		private class HttpsRequest
 		{
-			private HttpURLConnection http = null;         // http connection object
-			private HttpsURLConnection https = null;       // https connection object
-			private StringBuilder stringBuilder = null;    // ouput string accumulator
-			private boolean secure;                        // secure-mode on/off flag
-			private boolean robotsTxtMode;                 // accept non-html text flag (required for /robots.txt)
+			HttpURLConnection http = null;         // http connection object
+			HttpsURLConnection https = null;       // https connection object
+			StringBuilder stringBuilder = null;    // ouput string accumulator
+			boolean secure;                        // secure-mode on/off flag
+			boolean robotsTxtMode;                 // accept non-html text flag (required for /robots.txt)
 
 			HttpsRequest ( String uri ) throws Exception
 			{
@@ -371,9 +368,9 @@ public class RickBot
 			}
 		}
 
-		// loads a web page or /robots.txt synchronously or asynchronously 
+		// loads a web page or /robots.txt
 
-		private ArrayList< HttpsTarget > load () throws Exception
+		private ArrayList< HttpsTarget > loadPage () throws Exception
 		{
 			String protocol = target.protocol;
 			String hostname = target.hostname;
@@ -394,6 +391,8 @@ public class RickBot
 
 				robotRules = null;
 				HttpsRequest robotsHttp = null;
+
+				lastLoadMillis = new Long( 0 );
 
 				try
 				{
@@ -487,7 +486,10 @@ public class RickBot
 			if( newRobotsTxt )
 			{
 				if( robotRules != null )
+				{
 					println( "OK " + protocol + hostname + _robotsTxt + " crawl-delay=" + crawlDelay ); 
+					Thread.sleep( 1000 * crawlDelay );
+				}
 				else
 					println( "NO " + protocol + hostname + _robotsTxt ); 
 			}
@@ -499,7 +501,7 @@ public class RickBot
 				// rules matcher for current subdomain ready
 				if( !robotRules.isAllowed( protocol + hostname + path ) )
 				{
-					println( "  /robots.txt DISALLOW [" + protocol + hostname + path + "]" );
+					println( "  DISALLOW " + protocol + hostname + path  );
 					return( null );	// skip page blocked by /robots.txt
 				}
 			}
@@ -831,9 +833,8 @@ public class RickBot
 
 		public void run ()
 		{
-			try
-			{
-				load();
+			try {
+				loadPage();
 			}
 			catch( Exception e )
 			{
@@ -850,13 +851,13 @@ public class RickBot
 		ArrayList< HttpsTarget > targets;
 		int crawlDelay = 1;                          // crawl delay 
 		boolean finished = false;
+		ExecutorService executor = Executors.newFixedThreadPool( 5 );
 
-		PageCrawler( ArrayList< HttpsTarget > targets ) 
-		{
+		PageCrawler( ArrayList< HttpsTarget > targets ) {
 			this.targets = targets;	
 		}
 
-		private ArrayList< HttpsTarget > crawl ()
+		ArrayList< HttpsTarget > crawlPage ()
 		{
 			// convenicent class encapsulates java.util.concurrent.Future to allow
 			// polling for completion after asynchornously launching loader.
@@ -895,7 +896,7 @@ public class RickBot
 					// rules matcher for current subdomain ready
 					if( !robotRules.isAllowed( target.protocol + target.hostname + target.path ) )
 					{
-						println( "  /robots.txt DISALLOW " + target.protocol + target.hostname + target.path );
+						println( "  DISALLOW " + target.protocol + target.hostname + target.path );
 						continue;
 					}
 				}
@@ -924,10 +925,13 @@ public class RickBot
 				{
 					long now = new Date().getTime();
 
-					long runningSeconds = (now - started) / 1000L;
-					float avgRequestRate = (float) (visited.size() + robotsTxtMap.size()) / ((float) (now - started) / 1000);
+					long runningSeconds = (now - started) / 1000L + 1;
+					float avgRequestRate = (float) (visited.size() + robotsTxtMap.size()) / runningSeconds; 
 //					println( "RUNNING/LOADED: " + runningSeconds + "/" +  (robotsTxtMap.size() + visited.size()) );
-//					println( String.format( "AVG REQUEST RATE: %.02f", avgRequestRate ) );
+//					println( String.format( "AVG RATE: %.02f ", avgRequestRate ) + " [" + target.hostname + "]" );
+
+					if( lastLoadMillis == null )
+						lastLoadMillis = new Long( 0 );
 
 					if( lastLoadMillis > 0 && now - lastLoadMillis <= 1000 * crawlDelay )
 					{
@@ -936,14 +940,14 @@ public class RickBot
 						Thread.sleep( delay ); 
 					}
 					
-					// load page asynchronously 
-
-					HttpsLoader loader = new HttpsLoader( target );
-
 					lastLoadMillis = new Long( new Date().getTime() );
 
 					if( started == 0 )
 						started = lastLoadMillis;
+
+					// load page asynchronously 
+
+					HttpsLoader loader = new HttpsLoader( target );
 
 					Future future = executor.submit( loader ); 
 
@@ -951,7 +955,7 @@ public class RickBot
 				}
 				catch( Exception e )
 				{
-					println( "crawl() Exception: " + e.getMessage() );
+					println( "crawlPage() Exception: " + e.getMessage() );
 					continue;
 				}
 			}
@@ -962,7 +966,8 @@ public class RickBot
 				{
 					try
 					{
-						Thread.sleep( 10 );
+						Thread.sleep( 5 );
+
 						// add loaded targets to pageTargets 
 						for( int i = 0; i < pending.size(); i++ )
 						{
@@ -984,7 +989,6 @@ public class RickBot
 						println( "Exception: " + e.getMessage() );
 						System.exit( -1 );
 					} 
-					// ### HANDLE FAILED ###	
 				}
 			}
 			if( pageTargets != null )
@@ -1002,28 +1006,32 @@ public class RickBot
 			return( targets );
 		}
 
-		private ArrayList< HttpsTarget > getTargets () {
+		ArrayList< HttpsTarget > getTargets () {
 			return( targets );
+		}
+
+		public void finalize () {
+			executor.shutdown();
 		}
 
 		public void run ()
 		{
-			targets = new PageCrawler( targets ).crawl(); 
+			targets = new PageCrawler( targets ).crawlPage(); 
 			for( ;; )
 			{
 				if( targets.size() == 0 )
 					break;
-
-				targets = new PageCrawler( targets ).crawl();
+				targets = new PageCrawler( targets ).crawlPage();
 			}
 			finished = true;
 		}
 	}
 
-	// called by main()
+	// entry point called by main()
 
-	public void crawlSite ( String url )  // instance method called by main()
+	public void crawlSite ( String url )
 	{
+		started = new Date().getTime();
 		try
 		{
 			// strip trailing slash(es)
@@ -1073,25 +1081,23 @@ public class RickBot
 
 			targets.add( new HttpsTarget( url ) );
 
-			PageCrawler crawler = new PageCrawler( targets );
+			PageCrawler pageCrawler = new PageCrawler( targets );
 
 			Thread crawlerThread = new Thread( new PageCrawler( targets ) );
 
 			crawlerThread.start();
 
-			while( !crawler.finished )
+			while( !pageCrawler.finished )
 			{
 				if( lastLoadMillis > 0 && new Date().getTime() - lastLoadMillis > 30000 )
 				{
 					// crawler unresponsive so kill/restart
 					crawlerThread.interrupt();
 					lastLoadMillis = 0L;
-					crawlerThread = new Thread( new PageCrawler( crawler.targets ) );
+					crawlerThread = new Thread( new PageCrawler( pageCrawler.targets ) );
 				}
 				Thread.sleep( 1000 );
 			}
-
-			executor.shutdown();
 
 			println( "" + (robotsTxtMap.size() + visited.size()) + " pages crawled." );
 		}
