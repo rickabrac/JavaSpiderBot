@@ -1,5 +1,5 @@
 //
-// Crawler.java - non-distributed single-domain web crawler
+// RickBot.java - non-distributed single-domain web crawler
 //
 // Copyright 2021 Rick Tyler
 //
@@ -120,6 +120,8 @@ public class RickBot
 		executor = Executors.newFixedThreadPool( 10 );
 	}
 
+	// used to support asynchronous http(s) loading
+
 	private class ConcurrentHashSet< T >
 	{
 		private ConcurrentHashMap< T, String > map = null;
@@ -157,7 +159,7 @@ public class RickBot
 		}
 	}
 
-	// convenience class that parses a url and store its components
+	// parses a url and store its components
 	
 	public class HttpsTarget
 	{
@@ -226,7 +228,7 @@ public class RickBot
 		}
 	}
 
-	// convenience class that loads pages asynchronously/concurrently
+	// that loads a webpage asynchronously
 
 	private class HttpsLoader implements Runnable
 	{
@@ -369,7 +371,7 @@ public class RickBot
 			}
 		}
 
-		// loads an http(s) page synchronously or asynchronously 
+		// loads a web page or /robots.txt synchronously or asynchronously 
 
 		private ArrayList< HttpsTarget > load () throws Exception
 		{
@@ -567,7 +569,7 @@ public class RickBot
 			catch( Exception e )
 			{
 				// url is otherwise invalid
-				println( "  ERROR: " + e.getMessage() );
+				println( "  ERROR " + e.getMessage() );
 				return( null );
 			}
 
@@ -841,15 +843,15 @@ public class RickBot
 		}
 	}
 
-	// Runnable class crawls website in breadth-first order
+	// crawls a web page and returns list of crawlable urls on that page
 
-	private class Crawler implements Runnable
+	private class PageCrawler implements Runnable
 	{
-		private ArrayList< HttpsTarget > targets;
-		private int crawlDelay = 1;                          // crawl delay 
-		private boolean finished = false;
+		ArrayList< HttpsTarget > targets;
+		int crawlDelay = 1;                          // crawl delay 
+		boolean finished = false;
 
-		Crawler( ArrayList< HttpsTarget > targets ) 
+		PageCrawler( ArrayList< HttpsTarget > targets ) 
 		{
 			this.targets = targets;	
 		}
@@ -1000,20 +1002,19 @@ public class RickBot
 			return( targets );
 		}
 
-		private ArrayList< HttpsTarget > getTargets ()
-		{
+		private ArrayList< HttpsTarget > getTargets () {
 			return( targets );
 		}
 
 		public void run ()
 		{
-			targets = new Crawler( targets ).crawl(); 
+			targets = new PageCrawler( targets ).crawl(); 
 			for( ;; )
 			{
 				if( targets.size() == 0 )
 					break;
 
-				targets = new Crawler( targets ).crawl();
+				targets = new PageCrawler( targets ).crawl();
 			}
 			finished = true;
 		}
@@ -1072,9 +1073,9 @@ public class RickBot
 
 			targets.add( new HttpsTarget( url ) );
 
-			Crawler crawler = new Crawler( targets );
+			PageCrawler crawler = new PageCrawler( targets );
 
-			Thread crawlerThread = new Thread( new Crawler( targets ) );
+			Thread crawlerThread = new Thread( new PageCrawler( targets ) );
 
 			crawlerThread.start();
 
@@ -1085,7 +1086,7 @@ public class RickBot
 					// crawler unresponsive so kill/restart
 					crawlerThread.interrupt();
 					lastLoadMillis = 0L;
-					crawlerThread = new Thread( new Crawler( crawler.targets ) );
+					crawlerThread = new Thread( new PageCrawler( crawler.targets ) );
 				}
 				Thread.sleep( 1000 );
 			}
