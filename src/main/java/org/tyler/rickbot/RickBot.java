@@ -379,19 +379,6 @@ public class RickBot
 			String path = target.path;
 			boolean updateRobotsTxt = target.updateRobotsTxt;
 
-//			if( !subdomainSwitching && !hostname.equalsIgnoreCase( domain ) )
-//				return( null );
-
-//			// ignore non-html formats before http(s) get 
-//			// assume file extension is accurate
-//
-//			for( int i = 0; i < _ignoreExtensions.length; i++ )
-//			{
-//				String ext = _ignoreExtensions[ i ];
-//				if( path.endsWith( ext ) || path.indexOf( ext + "?" ) >= 0 )
-//					return( null );
-//			}
-
 			String url = protocol + hostname + port + path;
 
 			SimpleRobotRules robotRules = null;
@@ -510,7 +497,7 @@ public class RickBot
 				// rules matcher for current subdomain ready
 				if( !robotRules.isAllowed( protocol + hostname + path ) )
 				{
-					println( "/robots.txt DISALLOW [" + protocol + hostname + path + "]" );
+					println( "  /robots.txt DISALLOW [" + protocol + hostname + path + "]" );
 					return( null );	// skip page blocked by /robots.txt
 				}
 			}
@@ -556,10 +543,6 @@ public class RickBot
 					path = ""; 
 				}
 
-//				// skip page if already visited
-//				if( visited.contains( protocol + hostname + path ) )
-//					return( null );
-
 				// When subdomainSwitching is disabled, the crawler must allow initial an redirect to
 				// succeed. For example, https://cnn.com immediately redirects to https://www.cnn.com,
 				// which is technically a different subdomain. In this instance, the crawler allows it.
@@ -573,7 +556,7 @@ public class RickBot
 				try
 				{
 					request =  new HttpsRequest( url );
-					responseCode = request.execute();	
+					responseCode = request.execute();
 				}
 				catch( Exception r )
 				{
@@ -836,7 +819,6 @@ public class RickBot
 				}
 
 				targets.add( new HttpsTarget( _url ) );
-
 //				println( "\thref=[" + href + "]" );
 			}
 
@@ -961,7 +943,6 @@ public class RickBot
 					if( started == 0 )
 						started = lastLoadMillis;
 
-//					println( "*** SPAWNING LOADER *** [" + target.getUrl() + "]" );
 					Future future = executor.submit( loader ); 
 
 					pending.add( new HttpsLoaderAsync( loader, future ) );
