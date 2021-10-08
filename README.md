@@ -1,11 +1,14 @@
 ## Synopsis
 
-Multi-threaded single domain web crawler in Java by Rick Tyler.
+Multi-threaded, single-domain web crawler in Java by Rick Tyler.
 
 ## Description
 
-This crawler uses a breadth-first strategy to search an entire website, subdomains included. 
-It honors the Crawl-delay setting in /robots.txt and prevents loading of disallowed pages. 
+This crawler uses a breadth-first strategy to search an entire website, reachable subdomains
+included. It honors the Crawl-delay setting in /robots.txt and prevents loading of disallowed pages. 
+A separate thread is spawned for each concurrent subdomain concurrently being searched. The
+asynchronous request rate is automatically throttled to avoid exceeding the website's ability to
+respond while striving to optimize request rate.
 
 ## System Requirements 
 
@@ -24,19 +27,7 @@ JDK 11, Maven 3.6.3, Unix shell (/bin/sh)
 	./crawl https://duckduckgo.com
 
 	OK https://duckduckgo.com/robots.txt
-	• https://duckduckgo.com/about
-		href=[https://duckduckgo.com/traffic]
-		href=[https://duckduckgo.com/app]
-		href=[https://duckduckgo.com/hiring]
-		href=[/hiring]
-		href=[/newsletter]
-		href=[https://duckduckgo.com/assets/email/DuckDuckGo-Privacy-Weekly_sample.png]
-		href=[https://spreadprivacy.com/delete-google-search-history]
-		href=[https://duckduckgo.com/privacy]
-		href=[https://duckduckgo.com/press]
-		href=[https://spreadprivacy.com]
-		href=[https://twitter.com/duckduckgo]
-		href=[https://reddit.com/r/duckduckgo]
+	• 1.0/2.8 https://duckduckgo.com/about [1/1]
 	ERROR 404 [https://duckduckgo.com/newsletter]
 	/robots.txt DISALLOW [https://duckduckgo.com/search?foo=bar]
 
@@ -44,15 +35,13 @@ JDK 11, Maven 3.6.3, Unix shell (/bin/sh)
 
 	• Lines beginning with "•" indicate successfully crawled pages.
 
-	• Indented lines with "href=[..."" indicate unique, crawlable URLs on the preceeding page.
+	  Format: • [<thread-request-rate>/rickbot-request-rate>] <url> [thread-pages-requested/rickbot-pages-requested]
 
-	• The ERROR line indicates an HTTP file not found failure.
+	• ERROR indicates an HTTP/1.1 failure code. Note that failed requests are included in request-rate calculation.
 
 	• The last line indicates a page disallowed by /robots.txt
 
 ## Limitations
-
-• Concurrent loading of different subdomains not supported. Crawler should enforce Crawl-delay for subdomains separately.
 
 • Switching Protocols (See HTTP/1.1 101) not supported.
 
