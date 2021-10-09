@@ -1,5 +1,5 @@
 //
-// RickBot.java - multi-threaded, single-domain web crawler by Rick Tyler 
+// RickBot.java - multi-threaded, single-domain, multi-subdomain web crawler by Rick Tyler 
 //
 // Copyright 2021 Rick Tyler
 //
@@ -44,17 +44,17 @@ import crawlercommons.robots.*;    // relies on crawlercommons for /robots.txt e
 
 public class RickBot
 {
-	ConcurrentHashMap< String, ConcurrentHashSet< String > > subdomainRequested; // previously requested pages for each subdomain 
+	ConcurrentHashMap< String, ConcurrentHashSet< String > > subdomainRequested; // previously requested page map per subdomain 
 	public static RickBot rickbot = null;                       // singleton app instance 
-	private final String _rickbot = "rickbot";                  // robot name 
 	private ConcurrentLinkedQueue< SiteCrawlerAsync > crawlers; // active crawler instances 
 	private HashMap< String, String > robotsTxtMap;             // robots.txt content indexed by subdomain
 	private ConcurrentHashSet< String > beenThere;              // set of pages previously visited by any instance 
 	private Pattern xmlTagRegex;                                // regex for a valid xml tag (see PageCrawler)
-	ExecutorService executor;                                   // used to manage concurrent site crawlers
-	private long botStarted;                                    // rickbot launch timestamp
+	private ExecutorService executor;                           // used to manage concurrent site crawlers
+	private long botStarted;                                    // time of rickbot launch
 	private final static String _httpProtocol = "http://";      // "http://" 
 	private final static String _httpsProtocol = "https://";    // "https://" 
+	private final String _rickbot = "rickbot";                  // robot's name 
 	private final int maxTagLength = 666;                       // assumed max html tag length (never exceeded in testing)
 	private final String _doctype = "<!DOCTYPE ";               // "<!DOCTYPE "
 	private final String _robotsTxt = "/robots.txt";            // "robots.txt"
@@ -83,7 +83,7 @@ public class RickBot
 		".rar"	
 	};
 
-	// Rickbot singleton class 
+	// Rickbot app singleton class 
 
 	RickBot ()
 	{
@@ -95,7 +95,7 @@ public class RickBot
 		subdomainRequested = new ConcurrentHashMap<>();
 	}
 
-	// ConcurrentHashSet<> is a concurrent HashSet<> implemented on top of ConcurrentHashMap<>
+	// Concurrent version of HashSet<> implemented on top of ConcurrentHashMap<>
 
 	private class ConcurrentHashSet< T >
 	{
@@ -142,22 +142,21 @@ public class RickBot
 	{
 		ConcurrentHashSet< String > requested;          // concurrent hash set of visited pages
 		String url = null;                              // root url passed to crawler 
-		boolean subdomainSwitching = true;              // allow subdomain switching
 		String domain;                                  // common name of target site
 		Long lastLoadMillis = 0L;                       // used to throttle request rate
 		long crawlDelay = 1L;                           // crawl-delay for this crawler
-		Long started;                                   // start time
+		Long started;                                   // crawler start time
 		int threadIdx;                                  // thread index used for output tracing
-		SiteCrawler crawler;                            // self instance
 		ArrayList< HttpsTarget > targets;               // current list of page targets
 		ArrayList< HttpsTarget > addLinks;              // link(s) to add to subdomain crawler targets
+		boolean subdomainSwitching = true;              // allow subdomain switching
+		SiteCrawler crawler;                            // self instance
 
 		SiteCrawler( String url )
 		{
 			this.url = url;
 			domain = new HttpsTarget( url ).hostname;
-			requested = subdomainRequested.get( domain );
-			// get requested page map if exists
+			requested = subdomainRequested.get( domain ); // get requested/visited page map if extant 
 			if( requested == null )
 			{
 				requested = new ConcurrentHashSet<>();
@@ -258,7 +257,7 @@ public class RickBot
 			}
 		}
 
-		// Enforces max crawl-rate when connection to website is not bandwidth-saturated
+		// Used to enforces maximum page request rate (crawl-rate)
 
 		private void delayCrawl ( String url ) throws Exception
 		{
@@ -276,7 +275,7 @@ public class RickBot
 			}
 		} 
 
-		// Loads a single web page asynchronously
+		// Loader class fetches a web page asynchronously
 
 		private class PageLoader implements Runnable
 		{
@@ -289,7 +288,7 @@ public class RickBot
 				this.targets = new ArrayList<>();    // list of HttpsTargets to crawl
 			}
 
-			// Loads a single web page or /robots.txt
+			// Called syncronously by loadPage() to do the actually loading 
 
 			private class HttpsRequest
 			{
@@ -345,7 +344,7 @@ public class RickBot
 					}
 				}
 
-				// Loads a single web page or /robots.txt
+				// Loads single web page or /robots.txt
 
 				private int execute () throws Exception
 				{
@@ -419,7 +418,7 @@ public class RickBot
 				}
 			}
 
-			// Loads a single web page and returns all crawlable urls
+			// Loads a single web page and returns all crawlable urls appearing on that page
 
 			private ArrayList< HttpsTarget > loadPage () throws Exception
 			{
@@ -956,6 +955,8 @@ public class RickBot
 				synchronized( rickbot )
 				{
 					println( pageReport );
+
+					// display crawlable hrefs found on page
 //					for( int i = 0; i < hrefList.size(); i++ )	// print each unique crawlable href on page
 //						println( hrefList.get( i ) );
 				}
@@ -963,7 +964,7 @@ public class RickBot
 				return( targets );
 			}
 
-			// Runnable interface entry point 
+			// Runnable interface for asynchronous PageLoader
 
 			public void run ()
 			{
@@ -978,7 +979,7 @@ public class RickBot
 			}
 		}
 
-		// Crawls one web page and returns list of crawlable urls. 
+		// Crawls a one web page and returns list of crawlable urls. 
 		// Used to implement depth-first search by SiteCrawler run().
 
 		private class PageCrawler implements Runnable
@@ -990,12 +991,13 @@ public class RickBot
 				this.targets = targets;	
 			}
 
+			// Given a list of http(s) targets as input, attempts to load each page asynchronously
+			// in order to accumulate a new list of crawlable targets appearing on any page of an 
+			// input target.
+
 			ArrayList< HttpsTarget > crawlPage ()
 			{
-				// convenience class encapsulates java.util.concurrent.Future to allow
-				// polling for completion after asynchornously launching loader.
-				// Asynchronous behavior is required to optimize the average page
-				// crawling rate.
+				// uses java.util.concurrent.Future to poll for completion of asynchronous page loaders
 
 				final class HttpsLoaderAsync
 				{
@@ -1166,6 +1168,8 @@ public class RickBot
 				return( targets );
 			}
 
+			// Runnable interface for Page Crawler
+
 			public void run ()
 			{
 				targets = new PageCrawler( targets ).crawlPage(); 
@@ -1177,6 +1181,8 @@ public class RickBot
 				}
 			}
 		}
+
+		// Runnable interface for SiteCrawler 
 
 		public void run ()
 		{
@@ -1208,6 +1214,8 @@ public class RickBot
 		}
 	}
 
+	// Runnable interface for RickBot
+
 	public void run ( String url )
 	{
 		try
@@ -1218,7 +1226,7 @@ public class RickBot
 
 			crawlers.add( new SiteCrawlerAsync( crawler, future ) );
 
-			// wait for crawler(s) to finish
+			// wait for all crawler(s) to finish
 
 			while( crawlers.size() > 0 )
 				Thread.sleep( 10000 );

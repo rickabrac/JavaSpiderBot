@@ -45,7 +45,7 @@ JDK 11, Maven 3.6.3, Unix shell (/bin/sh)
 
 • Switching Protocols (See HTTP/1.1 101) not supported.
 
-• Pages that cannot be loaded due to transient failures should be retried.
+• Pages that cannot be loaded due to transient failures should be retried. (ERROR java.net.SocketException: Network is down (Read failed))
 
 • Robot meta tags not supported (https://developers.google.com/search/docs/advanced/robots/robots_meta_tag))
 
