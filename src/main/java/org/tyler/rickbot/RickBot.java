@@ -1229,8 +1229,6 @@ public class RickBot
 			{
 				Thread.sleep( 10000 );
 
-				long now = new Date().getTime();
-
 				synchronized( crawlers )
 				{
 					Iterator it = crawlers.iterator();
@@ -1244,13 +1242,6 @@ public class RickBot
 						{
 							println( "  FINISHED Crawler[" + ++n + "/" + crawlers.size() + "] (" + async.crawler.domain + ")" );
 							it.remove();
-						}
-						else if( now - async.crawler.lastLoadMillis > 60000 )
-						{
-							async.future.cancel( true );
-							async.future = executor.submit( async.crawler ); 
-							println( "  RESTARTED Crawler[" + ++n + "/" + crawlers.size()
-								+ "] (" + async.crawler.domain + ") targetes.size()=" + async.crawler.targets.size() );
 						}
 					}
 				}
