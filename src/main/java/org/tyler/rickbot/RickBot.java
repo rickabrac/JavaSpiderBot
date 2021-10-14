@@ -1,5 +1,5 @@
 //
-// RickBot.java - multi-threaded, single-domain, multi-subdomain web crawler by Rick Tyler 
+// RickBot.java - multi-threaded, single-domain, multi-subdomain web crawler.
 //
 // Copyright 2021 Rick Tyler
 //
@@ -34,12 +34,13 @@ import java.util.Date;
 import java.util.concurrent.ConcurrentHashMap;
 import java.net.URL;
 import java.net.HttpURLConnection;
-import javax.net.ssl.HttpsURLConnection;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import javax.net.ssl.HttpsURLConnection;
+
 import crawlercommons.robots.*;    // relies on crawlercommons for /robots.txt enforcement
 
 public class RickBot
@@ -90,7 +91,7 @@ public class RickBot
 		crawlers = new ConcurrentLinkedQueue<>(); 
 		xmlTagRegex = Pattern.compile( "<(\"[^\"]*\"|'[^']*'|[^'\">])*>" );    // matches valid xml tag
 		robotsTxtMap = new HashMap<>();
-		executor = Executors.newFixedThreadPool( 100 );    // assume 50 subdomains maximum
+		executor = Executors.newFixedThreadPool( 100 );    // assume 50 concurrent subdomain searches max
 		beenThere = new ConcurrentHashSet<>();
 		subdomainRequested = new ConcurrentHashMap<>();
 	}
@@ -288,7 +289,7 @@ public class RickBot
 				this.targets = new ArrayList<>();    // list of HttpsTargets to crawl
 			}
 
-			// Called syncronously by loadPage() to do the actually loading 
+			// Called syncronously by loadPage() to do the loading 
 
 			private class HttpsRequest
 			{
@@ -349,7 +350,7 @@ public class RickBot
 				private int execute () throws Exception
 				{
 					if( http == null && https == null )
-						return( 666 );	// ignore non-http(s):// uri
+						return( 666 );
 
 					int responseCode = 0;
 					if( secure )
@@ -698,6 +699,7 @@ public class RickBot
 				long botRunningSeconds = (new Date().getTime() - botStarted) / 1000L + 1;
 				float avgRequestRate = (float) (requested.size() + robotsTxtMap.size()) / crawlerRunningSeconds; 
 				float botRequestRate = (float) (beenThere.size() + robotsTxtMap.size()) / botRunningSeconds; 
+
 				long now = new Date().getTime();
 				int crawlerIndex = -1;
 				synchronized( crawlers )
@@ -979,8 +981,8 @@ public class RickBot
 			}
 		}
 
-		// Crawls a one web page and returns list of crawlable urls. 
-		// Used to implement depth-first search by SiteCrawler run().
+		// Crawls one web page and returns the list of crawlable urls found on that page. 
+		// Called by SiteCrawler.run() to perform depth-first search of target domain.
 
 		private class PageCrawler implements Runnable
 		{
@@ -1058,7 +1060,7 @@ public class RickBot
 
 					newTargets.add( new HttpsTarget( url ) );
 
-					for(;;)
+					while( true )
 					{
 						try
 						{
@@ -1161,11 +1163,8 @@ public class RickBot
 
 				if( pageTargets != null )
 					newTargets.addAll( pageTargets );
-				return( newTargets );
-			}
 
-			ArrayList< HttpsTarget > getTargets () {
-				return( targets );
+				return( newTargets );
 			}
 
 			// Runnable interface for Page Crawler
@@ -1175,7 +1174,7 @@ public class RickBot
 				targets = new PageCrawler( targets ).crawlPage(); 
 				for( ;; )
 				{
-					if( targets == null || targets.isEmpty() ) // targets.size() == 0 )
+					if( targets == null || targets.isEmpty() ) 
 						break;
 					targets = new PageCrawler( targets ).crawlPage();
 				}
@@ -1198,13 +1197,11 @@ public class RickBot
 						break;
 					synchronized( crawlers )
 					{
-						if( addLinks.size() > 0 )
+						if( !addLinks.isEmpty() )
 							targets.addAll( addLinks );
 					}
 					pageCrawler = new PageCrawler( targets );
 				}
-//				while( crawlers.size() > 0 )
-//					Thread.sleep( 1000 );	// important!
 			}  
 			catch( Exception e )
 			{
@@ -1226,10 +1223,38 @@ public class RickBot
 
 			crawlers.add( new SiteCrawlerAsync( crawler, future ) );
 
-			// wait for all crawler(s) to finish
+			// wait for crawler(s) to finish
 
-			while( crawlers.size() > 0 )
+			while( !crawlers.isEmpty() )
+			{
 				Thread.sleep( 10000 );
+
+				long now = new Date().getTime();
+
+				synchronized( crawlers )
+				{
+					Iterator it = crawlers.iterator();
+					int n = 0;
+					while( it.hasNext() )
+					{
+						SiteCrawlerAsync async = (SiteCrawlerAsync) it.next();
+						if( async.future.isDone()
+							|| async.future.isCancelled()
+							|| async.crawler.targets.isEmpty() )
+						{
+							println( "  FINISHED Crawler[" + ++n + "/" + crawlers.size() + "] (" + async.crawler.domain + ")" );
+							it.remove();
+						}
+						else if( now - async.crawler.lastLoadMillis > 60000 )
+						{
+							async.future.cancel( true );
+							async.future = executor.submit( async.crawler ); 
+							println( "  RESTARTED Crawler[" + ++n + "/" + crawlers.size()
+								+ "] (" + async.crawler.domain + ") targetes.size()=" + async.crawler.targets.size() );
+						}
+					}
+				}
+			}
 
 			executor.shutdown();
 		}
