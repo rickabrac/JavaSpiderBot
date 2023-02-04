@@ -84,7 +84,7 @@ public class RickBot
 		".rar"	
 	};
 
-	// Rickbot app singleton class 
+	// RickBot app singleton class 
 
 	RickBot ()
 	{
@@ -1246,7 +1246,6 @@ public class RickBot
 					}
 				}
 			}
-
 			executor.shutdown();
 		}
 		catch( Exception e )
